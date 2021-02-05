@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en"><meta charset="utf-8"><meta name="generator" content="Hugo 0.68.3" /><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark"><title>Golang 基础 - Map&nbsp;&ndash;&nbsp;文成思宇</title><link rel="stylesheet" href="/css/core.min.01fd5b9c0cfe14549f7cf9f8e65272580f3a6cfc7d16fa179034a23dc7632fe8a03510e3823339fc18f53118dbdb9936.css" integrity="sha384-Af1bnAz&#43;FFSffPn45lJyWA86bPx9FvoXkDSiPcdjL&#43;igNRDjgjM5/Bj1MRjb25k2"><meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Golang 基础 - Map" /><meta name="twitter:image" content="https://alexpany.github.io/golang/hashmap/01.png" /><body><section id="header">
+    <div class="header wrap"><span class="header left-side"><a class="site home" href="/"><span class="site name">文成思宇</span></a></span>
+        <span class="header right-side"><div class="nav wrap"><nav class="nav"><a class="nav item" href="/golang/">Golangs</a></nav></div></span></div></section><section id="content"><div class="article-container"><section class="article header">
+    <h1 class="article title">Golang 基础 - Map</h1><p class="article date">Friday, February 5, 2021</p></section><article class="article markdown-body"><p><img class="cover" src="01.png" alt></p><p>[toc]</p>
+<h1 id="哈希表hash-table">哈希表（Hash Table）</h1>
+<h2 id="概述overview">概述（Overview）</h2>
+<p><a href="https://en.wikipedia.org/wiki/Hash_table"target="_blank" rel="noopener noreferrer"><strong><code>哈希表（Hash Table）</code></strong></a>
+ 又称 <strong><code>散列表</code></strong>，是一种实现关联数组抽象数据类型的数据结构，这种结构可以将 <strong><code>键（Key）</code></strong> 映射到 <strong><code>值（Value）</code></strong> 上或者说所对应的 <strong><code>存储地址（Addr）</code></strong> 上。</p>
+<p>那么把关键字（Key）映射到对应的存储地址上的函数称为 <strong><code>哈希函数（hash function）</code></strong>。</p>
+<p>理想情况下 <strong><code>哈希函数（hash function）</code></strong> 会将每个 <strong><code>键（Key）</code></strong> 均匀的分配到不同的地址中，但是由于在设计 <strong><code>哈希函数（hash function）</code></strong> 过程中以及哈希输入 <strong><code>键（Key）</code></strong> 的范围通常大于输出范围，可能会导致两个或两个以上的 <strong><code>键（Key）</code></strong> 生成了相同的索引，造成不同的关键字映射上到同一地址上，我们将这种情况称为 <strong><code>冲突（collision）</code></strong>，而这些发生碰撞的关键字（key）我们称为 <strong><code>同义词</code></strong></p>
+<br>
+<h2 id="设计思路">设计思路</h2>
+<p>想要实现一个性能优异的哈希表，有两个核心点：</p>
+<ul>
+<li>设计哈希构造函数；</li>
+<li>解决哈希冲突的方法；</li>
+</ul>
+<p>完成以上两点可以很体现散列 <strong><em>O</em>(1)</strong> 的读写性能。</p>
+<h3 id="哈希函数构造方法">哈希函数构造方法</h3>
+<h4 id="直接定址法">直接定址法</h4>
+<p>直接将 <strong><code>关键字（key）</code></strong> 通过某个线性函数计算出的值作为散列地址。</p>
+<pre><code>f(key) = a * key + b (其中a和b都是常数)
+</code></pre><p><strong>场景</strong>：适合可确定关键字范围，查较小找表。关键字是连续的情况</p>
+<p><strong>优点</strong>：简单，散列均匀，不会产生冲突。</p>
+<p><strong>缺点</strong>：需要知道关键字的分布，当关键字不连续会造成较大的空间浪费。</p>
+<p><strong>举例</strong>：统计 1990 年后出生的人口数分布，如下表：
+散列地址 | 出生年份 | 人数
+:&mdash;:|:&mdash;:|:&mdash;:
+0 | 1990 | 1200 万
+1 | 1991 | 1500 万
+2 | 1992 | 1800 万
+&hellip; | &hellip; | &hellip;
+20 | 2010 | 600 万</p>
+<p>我们可以通过出生年份作为关键字，<code>Hash(key) = key - 1990</code>，那么当<code>key=1992</code>年的时候，那么 hash(1992) = 1992 - 1990 = 2 ，那么 等于 2 的散列地址中值为 1800 万。</p>
+<h4 id="除留余数法">除留余数法</h4>
+<p>假定已知散列表长度为 <code>M</code>，取一个不大于但最近于或等于长度 M 的 <strong><code>质数P</code></strong>，利用取模的方式计算散列存储地址，该方法的核心在于 <strong><code>质数P</code></strong> 的取值，取值不当容易造成同义词。</p>
+<pre><code>f(key) = key mode  P (P &lt;= M)
+</code></pre><p><strong>场景</strong>：适合可确定关键字范围，查较小找表。关键字是连续的情况</p>
+<p><strong>优点</strong>：简单，适用范围广，是最常使用的。</p>
+<p><strong>缺点</strong>：需要已知散列长度，计算质数的选取。</p>
+<p><strong>举例</strong>：假定散列长度 <strong><code>M = 10</code></strong>，我们取离 10 最近的质数，<strong><code>质数P = 7</code></strong> ，在通过取模方式来计算散列地址，如图所示：</p>
+<p><img  src="https://note.youdao.com/yws/api/personal/file/WEBbdba76433d549a91a1f1ff43a991adaf?method=download&amp;shareKey=94ba006e82341af9c344430185642d3a"
+        alt="image"/></p>
+<h4 id="数字分析法">数字分析法</h4>
+<p>当 <strong><code>关键字（key）</code></strong> 是数值型或者说是进制（如二进制、十进制） ，分析关键字各个位的分布情况，丢掉分布不均匀的位，抽取较为均匀位用来计算存储位置。</p>
+<p><strong>场景</strong>：适用于关键较长，且对关键字已知的情况。</p>
+<p><strong>优点</strong>：设计简单，散列均匀，不会产生冲突。</p>
+<p><strong>缺点</strong>：当关键字不连续会造成较大的空间浪费</p>
+<p><strong>举例</strong>：假设我们有一组 NUM1 ~ NUM100 的数据，如下：</p>
+<table>
+<thead>
+<tr>
+<th align="center">编号</th>
+<th align="center">关键字</th>
+<th align="center">截取后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="center">NUM1</td>
+<td align="center">KB912342001</td>
+<td align="center">123421</td>
+</tr>
+<tr>
+<td align="center">NUM2</td>
+<td align="center">KB919851002</td>
+<td align="center">198512</td>
+</tr>
+<tr>
+<td align="center">NUM3</td>
+<td align="center">KB923678003</td>
+<td align="center">236783</td>
+</tr>
+<tr>
+<td align="center">NUM4</td>
+<td align="center">KB984736004</td>
+<td align="center">847364</td>
+</tr>
+<tr>
+<td align="center">&hellip;&hellip;</td>
+<td align="center">&hellip;&hellip;</td>
+<td align="center">&hellip;&hellip;</td>
+</tr>
+<tr>
+<td align="center">NUM98</td>
+<td align="center">KB936132098</td>
+<td align="center">361328</td>
+</tr>
+<tr>
+<td align="center">NUM99</td>
+<td align="center">KB975127099</td>
+<td align="center">751279</td>
+</tr>
+<tr>
+<td align="center">NUM100</td>
+<td align="center">KB951127100</td>
+<td align="center">511270</td>
+</tr>
+</tbody>
+</table>
+<p>通过分析我们得出，<strong><code>关键字（key）</code></strong> 有 11 位组成，其中前三位和倒数 2，3 位出现相同数字出现相同概率较大，分布不均，则被我们丢弃，我们选择 4 到 8 位以及最后一位作为哈希值。</p>
+<h4 id="平方取中法">平方取中法</h4>
+<p>将 <strong><code>关键字（Key）</code></strong> 先平方，然后根据可使用空间的大小，选取平方数是中间几位为散列存储地址。具体中间取几位，则根据实际情况来定，这种方法的散列地址与关键字的每一位都有关系，使得散列相对比较均匀。</p>
+<p><strong>场景</strong>：适合用于不知道关键词分布，且关键字位数不长的情况</p>
+<p><strong>举例</strong>：设有一组关键字值如下，假设可利用地址空间大小为 1024，平方后取平方数的中间三位作为相当记录的存储地址。</p>
+<table>
+<thead>
+<tr>
+<th align="center">关键字</th>
+<th align="center">转码</th>
+<th align="center">转码的平方</th>
+<th align="center">散列地址</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="center">ABC</td>
+<td align="center">010203</td>
+<td align="center">0104101209</td>
+<td align="center">101</td>
+</tr>
+<tr>
+<td align="center">BCD</td>
+<td align="center">020304</td>
+<td align="center">0412252416</td>
+<td align="center">252</td>
+</tr>
+<tr>
+<td align="center">CDE</td>
+<td align="center">030405</td>
+<td align="center">0924464025</td>
+<td align="center">464</td>
+</tr>
+<tr>
+<td align="center">DEF</td>
+<td align="center">040506</td>
+<td align="center">1640736036</td>
+<td align="center">736</td>
+</tr>
+</tbody>
+</table>
+<h4 id="折叠法">折叠法</h4>
+<p>将 <strong><code>关键字（Key）</code></strong> 分割成位数相同的几部分（由于关键字长度的问题可能最后分割的位数会少点），然后取这几部分的叠加和（舍去进位）作为散列存储地址。</p>
+<p><strong>场景</strong>：这种方法适用于关键字位数较多，而且关键字中每一位上数字分布大致均匀的情况。</p>
+<p><strong>举例</strong>：</p>
+<h4 id="伪随机数法">伪随机数法</h4>
+<p>伪随机数法是将利用数据的键值经过随机数法的运算后的结果作为数据存储的位置。其公式如下：</p>
+<pre><code>f(key) = (a * Key + b) mod ArrayLength （a、b为质数）
+</code></pre><p><strong>举例</strong>：某中学，学生编号为：980541，学生共有 798 个，那么我们假设 a = 13 b = 7，根据公式：</p>
+<pre><code>f(980541) = (13 * 980541 + 7) % 980541 = 7
+</code></pre><p>则该学生数据存储在 7 位置</p>
+<h3 id="哈希冲突处理方法">哈希冲突处理方法</h3>
+<p>常用的哈希函数构造方法</p>
+<h4 id="开放定址法">开放定址法</h4>
+<p>将冲突的哈希地址作为自变量，通过某种冲突解决函数获得新的空闲哈希地址方法。</p>
+<p><strong>核心思想</strong>：当某一记录的 <strong><code>关键字（Key）</code></strong> 的初始哈希散列地址 <strong><code>h0 = H(key)</code></strong> 发生冲突时，以 <strong><code>H0</code></strong> 为基础，采取合适的方法计算得到新的哈希散列地址 <strong><code>H1</code></strong>，如果 <strong><code>H1</code></strong> 仍然发生冲突，在以 <strong><code>H1</code></strong> 为基础，继续探测，直到获得一个不发生冲突的散列地址 <strong><code>Hn</code></strong>。</p>
+<p><strong>探测</strong>：通常寻找下一个不冲突空的散列地址的过程。</p>
+<h5 id="线性探测法">线性探测法</h5>
+<p>当发生冲突时，顺序的去查看表中下一个单元（当探测到表尾时，下一个探测地址从表的首地址开始）,直到找到可用的空闲单元（前提是表没有被装满）。</p>
+<blockquote>
+<p>探测公式: <strong>D(i) = D(i-1) % M (1<code>$\leq$</code> i <code>$\leq$</code>M-1)</strong></p>
+</blockquote>
+<p>线性探测方法会造成大量元素在相邻的散列地址上聚集（堆积），增加了查找的次数，大大降低了查找性能。</p>
+<h5 id="平方探测法">平方探测法</h5>
+<p>当发生冲突时，冲突地址为 <strong><code>D(0)</code></strong>，根据平方探测法得到新的访问地址，地址序列大概如下：D(0)+ <code>$1^2$</code>, D(0)+<code>$-1^2$</code>, D(0)+<code>$-1^2$</code>,</p>
+<blockquote>
+<p>探测公式: <strong>D(i) = D(0)+ <code>$-1^2$</code>, D(i)+ <code>$-1^2$</code>,</strong></p>
+</blockquote>
+<p>平方探测烦方法会解决散列地址堆积的问题，但是由于平方的操作，会导致地址之间的间隔较大，不能完整全探测到所有散列地址。</p>
+<h5 id="再散列探测方法">再散列探测方法</h5>
+<p>再散列探测方法 又称（<strong>双散列方法</strong>），需要使用两个哈希函数，当通过第一个哈希函数计算的散列地址发生冲突的时，再利用第二个散列函数计算 <strong><code>关键字（Key）</code></strong> 的 <strong><code>地址增量</code></strong></p>
+<blockquote>
+<p>探测公式: <strong>D<sub>i</sub> = (F(key) + i x F2(key)) % M</strong></p>
+<p>( <strong>i</strong> 是冲突次数，初始为 0， <strong>M</strong> 为散列长度)</p>
+</blockquote>
+<h5 id="伪随机探测法">伪随机探测法</h5>
+<br>
+<h4 id="拉链地址法">拉链地址法</h4>
+<p>对于不同 <strong><code>关键字（Key）</code></strong> 通过哈希函数会映射到同一个散列地址上，为了避免这样 <strong><code>同义词</code></strong> 发生冲突，将具有相同散列地址的 <strong><code>同义词</code></strong> 存放到一个 <strong><code>线性链表</code></strong> 中，称为 <strong><code>同义词链表</code></strong>，同时用散列地址存放 <strong><code>同义词链表</code></strong> 的头指针。</p>
+<p>我们通过一个示例，来看下使用拉链法，的散列结构：</p>
+<p><strong>例：</strong> 已知一组关键字为 <strong>[19、14、23、01、68、20、84、27、55、11、10、79]</strong>，设散列函数为 <strong><code>F(key) = key mode 13</code></strong>。使用拉链地址法处理哈希冲突，构造对应散列。</p>
+<p>构建后散列，如图所示：</p>
+<p><img  src="https://note.youdao.com/yws/api/personal/file/WEBdba78ed25a5053c4ac0ef5e162005c8c?method=download&amp;shareKey=24edb089c27563cc6d5da3a35e922b4c"
+        alt="image"/></p>
+<h3 id="哈希表的查找">哈希表的查找</h3>
+<p>哈希表的查找过程，类似于哈希表的构造，大致过程如下：</p>
+<ul>
+<li>先根据给定的 <strong><code>关键字（Key）</code></strong>，通过哈希函数计算出对应散列地址，并判断该散列地址是否存在
+<ul>
+<li>如果没有，则说没找到对应的 <strong><code>关键字（Key）</code></strong>，直接返回查找失败；</li>
+<li>如果有，则检查 <strong><code>关键字（Key）</code></strong>是否与之匹配；
+<ul>
+<li>如果匹配成功，返回查找结果；</li>
+<li>如果匹配不成功，则按照给定冲突解决方法计算出下一个散列地址，在按照上面的流程在走一遍，直到匹配成功（可能最终也没有找到匹配的关键字，则返回查找失败）；</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="哈希表的查找性能">哈希表的查找性能</h4>
+<p>通过上面的哈希表查找的流程可以看出，在整个查找过程，仍然是通过给定具体的值和目标值进行比对，那么比对次数是基于哈希表三个重要因数，即：<strong><code>哈希函数</code></strong>、<strong><code>处理冲突的方法</code></strong>、<strong><code>装填因子</code></strong>。</p>
+<p><strong><code>装填因子（load factor）</code>：</strong> 一般记做 <strong><code>$\alpha$</code></strong>，表示了一个散列表中装满的程度。</p>
+<blockquote>
+<p><strong><code>$\alpha$</code></strong> = <strong>表中填入的记录数</strong> / <strong>散列表的长度</strong></p>
+</blockquote>
+<p><strong>平均查找长度（Average Search Length，ASL）：</strong> 在查找运算中，由于所费时间在关键字的比较上，所以把平均需要和待查找值比较的关键字次数称为平均查找长度</p>
+<br>
+<br>
+<h1 id="gos-mapgo-hash-table">Go&rsquo;s Map（Go Hash Table）</h1>
+<p>OK，通过上面的对哈希表一些简单的介绍，以及常用的操作等，那么我们现在对哈希表有一定的了解了，接下来我们就开始聊聊 Go 中 <strong><code>hashmap</code></strong> 的实现。</p>
+<h2 id="数据结构struct">数据结构（Struct）</h2>
+<p>我们先从 <strong><code>hashmap</code></strong> 的数据结构实现来说，Go 中将 <strong><code>hashmap</code></strong> 定义成了<a href="https://github.com/golang/go/blob/ccb2e906882e45fe2d22c31049185208adbfb62e/src/runtime/map.go#L115"target="_blank" rel="noopener noreferrer"><strong><code>runtime.hmap</code></strong></a>
+ 的结构，那么我们通过源码分析来看下 <a href="https://github.com/golang/go/blob/ccb2e906882e45fe2d22c31049185208adbfb62e/src/runtime/map.go#L115"target="_blank" rel="noopener noreferrer"><strong><code>runtime.hmap</code></strong></a>
+ 的内部字段：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">type</span> <span class="nx">hmap</span> <span class="kd">struct</span> <span class="p">{</span>
+	<span class="nx">count</span>      <span class="kt">int</span>            <span class="c1">// 表示当前哈希表中的元素数量
+</span><span class="c1"></span>	<span class="nx">flags</span>      <span class="kt">uint8</span>
+
+	<span class="c1">// 表示当前哈希表持有的 buckets 数量，但是因为哈希表中桶的数量都 2 的倍数，
+</span><span class="c1"></span>	<span class="c1">// 所以该字段会存储对数，也就是 len(buckets) == 2^B；
+</span><span class="c1"></span>	<span class="nx">B</span>          <span class="kt">uint8</span>
+	<span class="nx">noverflow</span>  <span class="kt">uint16</span>         <span class="c1">// overflow 的 bucket 近似数
+</span><span class="c1"></span>
+	<span class="c1">//是哈希的种子，它能为哈希函数的结果引入随机性，
+</span><span class="c1"></span>	<span class="c1">//这个值在创建哈希表时确定，并在调用哈希函数时作为参数传入
+</span><span class="c1"></span>	<span class="nx">hash0</span>      <span class="kt">uint32</span>
+	<span class="nx">buckets</span>    <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span> <span class="c1">// 2^B存储桶数组。如果计数==0，则可能为零
+</span><span class="c1"></span>
+	<span class="c1">// 是哈希在扩容时用于保存之前 buckets 的字段，
+</span><span class="c1"></span>	<span class="c1">// 扩容的时候，buckets 长度会是 oldbuckets 的两倍
+</span><span class="c1"></span>	<span class="nx">oldbuckets</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span>
+
+	<span class="c1">// 指示扩容进度，小于此地址的 buckets 迁移完成
+</span><span class="c1"></span>	<span class="nx">nevacuate</span>  <span class="kt">uintptr</span>
+	<span class="nx">extra</span>      <span class="o">*</span><span class="nx">mapextra</span>
+<span class="p">}</span>
+
+<span class="kd">type</span> <span class="nx">mapextra</span> <span class="kd">struct</span> <span class="p">{</span>
+    <span class="c1">// overflow 包含的是 hmap.buckets 的 overflow 的 bucket
+</span><span class="c1"></span>	<span class="nx">overflow</span>    <span class="o">*</span><span class="p">[]</span><span class="o">*</span><span class="nx">bmap</span>
+
+	<span class="c1">// oldoverflow 包含扩容时的 hmap.oldbuckets 的 overflow 的 bucket
+</span><span class="c1"></span>	<span class="nx">oldoverflow</span> <span class="o">*</span><span class="p">[]</span><span class="o">*</span><span class="nx">bmap</span>
+
+	<span class="c1">// 指向空闲的 overflow bucket 的指针
+</span><span class="c1"></span>	<span class="nx">nextOverflow</span> <span class="o">*</span><span class="nx">bmap</span>
+<span class="p">}</span>
+</code></pre></div><p>基本的同结构 <a href="https://github.com/golang/go/blob/824f2d635ca96a7bded6ed039f8a9c0f06ee1443/src/runtime/map.go#L148"target="_blank" rel="noopener noreferrer"><strong><code>runtime.bmap</code></strong></a>
+</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">const</span> <span class="p">(</span>
+    <span class="nx">bucketCntBits</span> <span class="p">=</span> <span class="mi">3</span>
+    <span class="nx">bucketCnt</span>     <span class="p">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="nx">bucketCntBits</span> <span class="c1">// 8
+</span><span class="c1"></span><span class="p">)</span>
+
+<span class="c1">//bmap 是 hmap 中的 bucket
+</span><span class="c1"></span><span class="kd">type</span> <span class="nx">bmap</span> <span class="kd">struct</span> <span class="p">{</span>
+    <span class="c1">// tophash 是 hash 值的高 8 位
+</span><span class="c1"></span>	<span class="nx">tophash</span> <span class="p">[</span><span class="nx">bucketCnt</span><span class="p">]</span><span class="kt">uint8</span>
+<span class="p">}</span>
+</code></pre></div><p>运行期间，Go 通过
+<a href="https://github.com/golang/go/blob/be64a19d99918c843f8555aad580221207ea35bc/src/cmd/compile/internal/gc/reflect.go#L81"target="_blank" rel="noopener noreferrer"><strong><code>gc.reflect.bmap()</code></strong></a>
+ 去重建了 <code>bmap</code> 结构如下，</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">type</span> <span class="nx">bmap</span> <span class="kd">struct</span> <span class="p">{</span>
+    <span class="nx">topbits</span>  <span class="p">[</span><span class="mi">8</span><span class="p">]</span><span class="kt">uint8</span>
+    <span class="nx">keys</span>     <span class="p">[</span><span class="mi">8</span><span class="p">]</span><span class="nx">keytype</span>
+    <span class="nx">values</span>   <span class="p">[</span><span class="mi">8</span><span class="p">]</span><span class="nx">valuetype</span>
+    <span class="nx">pad</span>      <span class="kt">uintptr</span>
+    <span class="nx">overflow</span> <span class="kt">uintptr</span>
+<span class="p">}</span>
+</code></pre></div><br>
+<h2 id="初始化init">初始化（Init）</h2>
+<h3 id="字面量">字面量</h3>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">m</span> <span class="o">:=</span> <span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">string</span><span class="p">{</span>
+	<span class="s">&#34;name&#34;</span><span class="p">:</span> <span class="s">&#34;alex&#34;</span><span class="p">,</span>
+	<span class="s">&#34;age&#34;</span><span class="p">:</span>  <span class="s">&#34;18&#34;</span><span class="p">,</span>
+<span class="p">}</span>
+</code></pre></div><h3 id="makemapkvhint-关键字"><code>make(map[k]v，hint)</code> 关键字</h3>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">m</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">map</span><span class="p">[</span><span class="kt">string</span><span class="p">]</span><span class="kt">int</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+</code></pre></div><p>通过<code>make</code>的创建 map 实例的时候，会调用 <a href="https://github.com/golang/go/blob/824f2d635ca96a7bded6ed039f8a9c0f06ee1443/src/runtime/map.go#L303"target="_blank" rel="noopener noreferrer"><strong><code>runtime.makemap()</code></strong></a>
+ 去实现的，那么我着手去分析下 <a href="https://github.com/golang/go/blob/824f2d635ca96a7bded6ed039f8a9c0f06ee1443/src/runtime/map.go#L303"target="_blank" rel="noopener noreferrer"><strong><code>runtime.makemap()</code></strong></a>
+ 的源代码。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">makemap</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">hint</span> <span class="kt">int</span><span class="p">,</span> <span class="nx">h</span> <span class="o">*</span><span class="nx">hmap</span><span class="p">)</span> <span class="o">*</span><span class="nx">hmap</span> <span class="p">{</span>
+	<span class="c1">// 通过阶乘方式计算，内存大小是否有溢出
+</span><span class="c1"></span>	<span class="nx">mem</span><span class="p">,</span> <span class="nx">overflow</span> <span class="o">:=</span> <span class="nx">math</span><span class="p">.</span><span class="nf">MulUintptr</span><span class="p">(</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">hint</span><span class="p">),</span> <span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">.</span><span class="nx">size</span><span class="p">)</span>
+	<span class="k">if</span> <span class="nx">overflow</span> <span class="o">||</span> <span class="nx">mem</span> <span class="p">&gt;</span> <span class="nx">maxAlloc</span> <span class="p">{</span>
+		<span class="nx">hint</span> <span class="p">=</span> <span class="mi">0</span>
+	<span class="p">}</span>
+
+    <span class="c1">// 初始化 runtime.hmap 结构
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+		<span class="nx">h</span> <span class="p">=</span> <span class="nb">new</span><span class="p">(</span><span class="nx">hmap</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="c1">// 设置 hash 随机种子
+</span><span class="c1"></span>	<span class="nx">h</span><span class="p">.</span><span class="nx">hash0</span> <span class="p">=</span> <span class="nf">fastrand</span><span class="p">()</span>
+
+    <span class="c1">// 计算最小需要 Bucket 数量
+</span><span class="c1"></span>    <span class="c1">// overLoadFactor 比较了桶的装载因子是否超过负载系数
+</span><span class="c1"></span>	<span class="nx">B</span> <span class="o">:=</span> <span class="nb">uint8</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+	<span class="k">for</span> <span class="nf">overLoadFactor</span><span class="p">(</span><span class="nx">hint</span><span class="p">,</span> <span class="nx">B</span><span class="p">)</span> <span class="p">{</span>
+		<span class="nx">B</span><span class="o">++</span>
+	<span class="p">}</span>
+	<span class="nx">h</span><span class="p">.</span><span class="nx">B</span> <span class="p">=</span> <span class="nx">B</span>
+
+    <span class="c1">// 分配初始化哈希表，
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">h</span><span class="p">.</span><span class="nx">B</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+		<span class="kd">var</span> <span class="nx">nextOverflow</span> <span class="o">*</span><span class="nx">bmap</span>
+		<span class="c1">// 创建用于保存桶的数组
+</span><span class="c1"></span>		<span class="nx">h</span><span class="p">.</span><span class="nx">buckets</span><span class="p">,</span> <span class="nx">nextOverflow</span> <span class="p">=</span> <span class="nf">makeBucketArray</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="nx">h</span><span class="p">.</span><span class="nx">B</span><span class="p">,</span> <span class="kc">nil</span><span class="p">)</span>
+		<span class="c1">//
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">nextOverflow</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+			<span class="nx">h</span><span class="p">.</span><span class="nx">extra</span> <span class="p">=</span> <span class="nb">new</span><span class="p">(</span><span class="nx">mapextra</span><span class="p">)</span>
+			<span class="nx">h</span><span class="p">.</span><span class="nx">extra</span><span class="p">.</span><span class="nx">nextOverflow</span> <span class="p">=</span> <span class="nx">nextOverflow</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+
+	<span class="k">return</span> <span class="nx">h</span>
+<span class="p">}</span>
+</code></pre></div><p>这里有个小细节点经常会被忽略，那就是我们在创建的 <strong><code>map</code></strong> 的时候，由于<a href="https://github.com/golang/go/blob/824f2d635ca96a7bded6ed039f8a9c0f06ee1443/src/runtime/map.go#L303"target="_blank" rel="noopener noreferrer"><strong><code>runtime.makemap()</code></strong></a>
+ 返回的是 <strong><code>*hmap</code></strong>，所以呢我们在操作的时候，其实会影响原数据，特别是将 <strong><code>map</code></strong> 作为某个函数参数，函数内部对 <strong><code>map</code></strong> 的操作，会影响到实参的变化。</p>
+<p><strong><a href="https://github.com/golang/go/blob/824f2d635ca96a7bded6ed039f8a9c0f06ee1443/src/runtime/map.go#L344"target="_blank" rel="noopener noreferrer">runtime.makeBucketArray()</a>
+</strong> 会根据传入的 B 计算出的需要创建的桶数量并在内存中分配一片连续的空间用于存储数据：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">makeBucketArray</span><span class="p">(</span><span class="nx">t</span> <span class="o">*</span><span class="nx">maptype</span><span class="p">,</span> <span class="nx">b</span> <span class="kt">uint8</span><span class="p">,</span> <span class="nx">dirtyalloc</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">)</span>
+<span class="p">(</span><span class="nx">buckets</span> <span class="nx">unsafe</span><span class="p">.</span><span class="nx">Pointer</span><span class="p">,</span> <span class="nx">nextOverflow</span> <span class="o">*</span><span class="nx">bmap</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="c1">//通过 1 &lt;&lt; b 计算桶数
+</span><span class="c1"></span>	<span class="nx">base</span> <span class="o">:=</span> <span class="nf">bucketShift</span><span class="p">(</span><span class="nx">b</span><span class="p">)</span>
+	<span class="nx">nbuckets</span> <span class="o">:=</span> <span class="nx">base</span>
+
+    <span class="c1">// 对于 b &gt;= 4 or base &gt;= 16, 需要额外开辟空间
+</span><span class="c1"></span>    <span class="c1">// 开辟的空间是基于 nbuckets = base数量 + 新增(b-4)平方的 nbuckets数量
+</span><span class="c1"></span>    <span class="c1">// 内存大小向上取整后，如果向上取整后的内存大小与之前计算的有差异，
+</span><span class="c1"></span>    <span class="c1">// 则nbuckets数量等于向上取整后内存大小整取当个bucket大小
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">b</span> <span class="o">&gt;=</span> <span class="mi">4</span> <span class="p">{</span>
+		<span class="nx">nbuckets</span> <span class="o">+=</span> <span class="nf">bucketShift</span><span class="p">(</span><span class="nx">b</span> <span class="o">-</span> <span class="mi">4</span><span class="p">)</span>
+		<span class="nx">sz</span> <span class="o">:=</span> <span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">.</span><span class="nx">size</span> <span class="o">*</span> <span class="nx">nbuckets</span>
+		<span class="nx">up</span> <span class="o">:=</span> <span class="nf">roundupsize</span><span class="p">(</span><span class="nx">sz</span><span class="p">)</span>
+		<span class="k">if</span> <span class="nx">up</span> <span class="o">!=</span> <span class="nx">sz</span> <span class="p">{</span>
+			<span class="nx">nbuckets</span> <span class="p">=</span> <span class="nx">up</span> <span class="o">/</span> <span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">.</span><span class="nx">size</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+
+	<span class="k">if</span> <span class="nx">dirtyalloc</span> <span class="o">==</span> <span class="kc">nil</span> <span class="p">{</span>
+		<span class="nx">buckets</span> <span class="p">=</span> <span class="nf">newarray</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="nx">nbuckets</span><span class="p">))</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+		<span class="nx">buckets</span> <span class="p">=</span> <span class="nx">dirtyalloc</span>
+		<span class="nx">size</span> <span class="o">:=</span> <span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">.</span><span class="nx">size</span> <span class="o">*</span> <span class="nx">nbuckets</span>
+		<span class="k">if</span> <span class="nx">t</span><span class="p">.</span><span class="nx">bucket</span><span class="p">.</span><span class="nx">ptrdata</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+			<span class="nf">memclrHasPointers</span><span class="p">(</span><span class="nx">buckets</span><span class="p">,</span> <span class="nx">size</span><span class="p">)</span>
+		<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+			<span class="nf">memclrNoHeapPointers</span><span class="p">(</span><span class="nx">buckets</span><span class="p">,</span> <span class="nx">size</span><span class="p">)</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+
+    <span class="c1">// 当传入所需的桶数小于计算得出桶数,就说明桶有溢出的情况
+</span><span class="c1"></span>    <span class="c1">// 则需要预先分配一些溢出桶
+</span><span class="c1"></span>	<span class="k">if</span> <span class="nx">base</span> <span class="o">!=</span> <span class="nx">nbuckets</span> <span class="p">{</span>
+		<span class="nx">nextOverflow</span> <span class="p">=</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nf">add</span><span class="p">(</span><span class="nx">buckets</span><span class="p">,</span> <span class="nx">base</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">)))</span>
+		<span class="nx">last</span> <span class="o">:=</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nf">add</span><span class="p">(</span><span class="nx">buckets</span><span class="p">,</span> <span class="p">(</span><span class="nx">nbuckets</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="nb">uintptr</span><span class="p">(</span><span class="nx">t</span><span class="p">.</span><span class="nx">bucketsize</span><span class="p">)))</span>
+		<span class="nx">last</span><span class="p">.</span><span class="nf">setoverflow</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span> <span class="p">(</span><span class="o">*</span><span class="nx">bmap</span><span class="p">)(</span><span class="nx">buckets</span><span class="p">))</span>
+	<span class="p">}</span>
+
+	<span class="k">return</span> <span class="nx">buckets</span><span class="p">,</span> <span class="nx">nextOverflow</span>
+<span class="p">}</span>
+</code></pre></div><p>根据 <strong><a href="https://github.com/golang/go/blob/824f2d635ca96a7bded6ed039f8a9c0f06ee1443/src/runtime/map.go#L344"target="_blank" rel="noopener noreferrer">runtime.makeBucketArray()</a>
+</strong> 的源代码分析可以得出，以下结论：</p>
+<ul>
+<li>当桶的数量小于 <strong>2<sup>4</sup></strong> 时，由于数据较少、使用溢出桶的可能性较低，会省略创建的过程以减少额外开销；</li>
+<li>当桶的数量多于 <strong>2<sup>4</sup></strong> 时，会额外创建 <strong>2 <sup>B-4</sup></strong> 个溢出桶；</li>
+</ul>
+<p>根据上述代码，我们能确定在正常情况下，正常桶和溢出桶在内存中的存储空间是连续的，只是被 <code>runtime.hmap</code> 中的不同字段引用，当溢出桶数量较多时会通过 <code>runtime.newobject</code> 创建新的溢出桶。</p>
+<br>
+<h2 id="操作">操作</h2>
+<h3 id="读写">读写</h3>
+<h3 id="扩容">扩容</h3>
+<h3 id="删除">删除</h3>
+<h2 id="碰到问题">碰到问题</h2>
+<h3 id="并发安全">并发安全</h3>
+<h2 id="整理总结">整理总结</h2>
+</article><section class="article author"><img class="avatar" src="/img/avatar.jpg" alt><p class="name">Alex Pan</p><div class="details"><a class="item" href="https://github.com/https://github.com/AlexPanY" target="_blank" rel="noopener noreferrer"><span class="iconfont icon-github"></span>&nbsp;https://github.com/AlexPanY</a><a class="item" href="mailto:psj474@gmail.com" target="_blank" rel="noopener noreferrer"><span class="iconfont icon-email"></span>&nbsp;psj474@gmail.com</a></div>
+</section>
+</div>
+<div class="article bottom"><section class="article discussion"><div id="disqus_thread"></div>
+<script type="application/javascript">
+    var disqus_config = function () {
+    
+    
+    
+    };
+    (function() {
+        if (["localhost", "127.0.0.1"].indexOf(window.location.hostname) != -1) {
+            document.getElementById('disqus_thread').innerHTML = 'Disqus comments not available by default when the website is previewed locally.';
+            return;
+        }
+        var d = document, s = d.createElement('script'); s.async = true;
+        s.src = '//' + "XXX" + '.disqus.com/embed.js';
+        s.setAttribute('data-timestamp', +new Date());
+        (d.head || d.body).appendChild(s);
+    })();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<a href="https://disqus.com" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a></section></div></section><section id="footer"><div class="footer-wrap">
+    <p class="copyright">文成思宇</p>
+    <p class="powerby"><span>Powered&nbsp;by&nbsp;</span><a href="https://gohugo.io" 
+        target="_blank" rel="noopener noreferrer">Hugo</a><span>&nbsp;&amp;&nbsp;</span><a href="https://themes.gohugo.io/hugo-notepadium/" 
+        target="_blank" rel="noopener noreferrer">Notepadium</a></p></div>
+</section><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.11.1/dist/katex.min.css" integrity="sha384-zB1R0rpPzHqg7Kpt0Aljp8JPLqbXI3bhnPWROx27a9N0Ll6ZP/&#43;DiW/UqRcLbRjq" crossorigin="anonymous"><script defer src="https://cdn.jsdelivr.net/npm/katex@0.11.1/dist/katex.min.js" integrity="sha384-y23I5Q6l&#43;B6vatafAwxRu/0oK/79VlbSz7Q9aiSZUvyWYIYsd&#43;qj&#43;o24G5ZU2zJz" crossorigin="anonymous"></script><script defer src="https://cdn.jsdelivr.net/npm/katex@0.11.1/dist/contrib/auto-render.min.js" integrity="sha384-kWPLUVMOks5AQFrykwIup5lo0m3iMkkHrD0uJ4H5cjeGihAutqP0yW0J6dpFiVkI" crossorigin="anonymous"
+            onload="renderMathInElement(document.body);"></script><script src="/js/prism.min.28f2bfd6dfaa7ad0e8b973373bb7db234d27a2faafc26d5ffd2de4c2b1b5f2bf80011f2e2976dc9fb364abb13f63ebdc.js" integrity="sha384-KPK/1t&#43;qetDouXM3O7fbI00novqvwm1f/S3kwrG18r&#43;AAR8uKXbcn7Nkq7E/Y&#43;vc"></script></body>
+
+</html>
